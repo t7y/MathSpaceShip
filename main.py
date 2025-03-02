@@ -26,8 +26,12 @@ playerImg = pygame.image.load('player.png')
 playerX = 370
 playerY = 480
 
+# Enemy Images
+alien_img_normal = pygame.image.load('alien.png')
+alien_img_sad = pygame.image.load('sad_alien.png')
+current_enemy_img = alien_img_normal  # current image for the alien
+
 # Enemy (Alien) - starts at the same x position as the spaceship
-enemyImg = pygame.image.load('alien.png')
 enemyX = playerX
 enemyY = random.randint(50, 150)
 spot_size = 40  # distance the alien moves down if the answer is wrong
@@ -51,7 +55,8 @@ over_font = pygame.font.Font('freesansbold.ttf', 64)
 question_text = ""
 correct_answer = 0
 user_answer = ""
-math_question_active = True  # Always in math question mode
+# Always in math question mode (turn-based)
+math_question_active = True
 
 # Feedback variables
 feedback_message = ""
@@ -71,12 +76,12 @@ def game_over_text():
     screen.blit(over_text, (200, 250))
 
 
-def player(x, y):
+def draw_player(x, y):
     screen.blit(playerImg, (x, y))
 
 
-def enemy(x, y):
-    screen.blit(enemyImg, (x, y))
+def draw_enemy(x, y):
+    screen.blit(current_enemy_img, (x, y))
 
 
 def fire_bullet(x, y):
@@ -128,70 +133,71 @@ while running:
         if event.type == pygame.QUIT:
             running = False
 
-        # Only allow input if not waiting for feedback
+        # Process input only if not waiting for feedback.
         if not waiting_for_feedback and event.type == pygame.KEYDOWN:
             if event.key == pygame.K_RETURN:
                 try:
                     if int(user_answer) == correct_answer:
                         feedback_message = "Correct!"
                         last_result = "correct"
+                        # Immediately fire the bullet and change alien image.
+                        bulletSound = mixer.Sound("laser.wav")
+                        bulletSound.play()
+                        fire_bullet(playerX, playerY)
+                        explosionSound = mixer.Sound("explosion.wav")
+                        explosionSound.play()
+                        current_enemy_img = alien_img_sad
                     else:
                         feedback_message = "Incorrect!"
                         last_result = "incorrect"
                 except ValueError:
                     feedback_message = "Incorrect!"
                     last_result = "incorrect"
-                # Start feedback timer and disable further input
                 waiting_for_feedback = True
                 feedback_start_time = pygame.time.get_ticks()
             elif event.key == pygame.K_BACKSPACE:
                 user_answer = user_answer[:-1]
             else:
-                # Accept only digits for the answer.
                 if event.unicode.isdigit():
                     user_answer += event.unicode
 
-    # During feedback, display the message until the timer elapses.
+    # Display feedback if waiting.
     if waiting_for_feedback:
         current_time = pygame.time.get_ticks()
         feedback_surface = font.render(feedback_message, True, (255, 255, 0))
         screen.blit(feedback_surface, (300, 250))
-        # Check if feedback duration has passed
         if current_time - feedback_start_time > feedback_duration:
             waiting_for_feedback = False
-            # Process the result after feedback:
             if last_result == "correct":
-                # Correct: fire bullet (visual and sound) and reset alien at top.
-                bulletSound = mixer.Sound("laser.wav")
-                bulletSound.play()
-                fire_bullet(playerX, playerY)
-                explosionSound = mixer.Sound("explosion.wav")
-                explosionSound.play()
                 score_value += 1
+                # Spawn a new alien at the top with normal image.
                 enemyX = playerX
                 enemyY = random.randint(50, 150)
+                current_enemy_img = alien_img_normal
             else:
-                # Incorrect: move alien closer.
+                # Incorrect: move alien down one spot.
                 enemyY += spot_size
-            # Generate a new math question for the next turn.
+            # Generate a new math question.
             generate_math_question()
 
-    # Check game over condition: if alien gets too close to the spaceship.
+    # Game Over check.
     if enemyY >= playerY - 50:
         game_over_text()
         pygame.display.update()
         pygame.time.wait(3000)
         running = False
 
-    # Draw spaceship, alien, and animate bullet if active.
-    player(playerX, playerY)
-    enemy(enemyX, enemyY)
+    # Draw the spaceship and alien.
+    draw_player(playerX, playerY)
+    draw_enemy(enemyX, enemyY)
+
+    # Animate bullet if fired.
     if bullet_state == "fire":
         bullet_animation()
 
     show_score(textX, textY)
 
-    # Display math question and current answer input if not waiting for feedback.
+    # Display math question and current answer if not waiting for feedback.
     if not waiting_for_feedback:
         question_surface = font.render(question_text, True, (255, 255, 0))
         answer_surface = font.render(user_answer, True, (255, 255, 0))
