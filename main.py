@@ -45,11 +45,13 @@ bulletY = playerY
 # Score and incorrect answer counters
 score_value = 0
 incorrect_count = 0
+consecutive_incorrect_count = 0  # New variable to count consecutive incorrect answers
+
 font = pygame.font.Font('freesansbold.ttf', 32)
 textX = 10
 textY = 10
 
-# Game Over font
+# Game Over/Win font (for win, we'll still use the larger font)
 over_font = pygame.font.Font('freesansbold.ttf', 64)
 
 # Math Question Variables
@@ -69,31 +71,38 @@ feedback_duration = 1000  # milliseconds (1 second)
 waiting_for_feedback = False  # True when feedback is being displayed
 last_result = None  # "correct" or "incorrect" or "timeout"
 
-
 def show_score(x, y):
     score_text = font.render("Score: " + str(score_value), True, (255, 255, 255))
     incorrect_text = font.render("Incorrect: " + str(incorrect_count), True, (255, 255, 255))
     screen.blit(score_text, (x, y))
     screen.blit(incorrect_text, (x, y + 40))
 
-
 def show_timer(x, y, time_left):
     timer_text = font.render("Time: " + str(time_left), True, (255, 255, 255))
     screen.blit(timer_text, (x, y))
 
+def game_over_text(reason=None):
+    # Use a smaller font for game over messages
+    game_over_font = pygame.font.Font('freesansbold.ttf', 40)
+    if reason == "3_wrong_answers":
+        message = "GAME OVER. Too Many Wrong Answers!"
+    else:
+        message = "GAME OVER"
+    over_text = game_over_font.render(message, True, (255, 255, 255))
+    # Center the text on the screen
+    text_rect = over_text.get_rect(center=(400, 300))
+    screen.blit(over_text, text_rect)
 
-def game_over_text():
-    over_text = over_font.render("GAME OVER", True, (255, 255, 255))
-    screen.blit(over_text, (200, 250))
-
+def game_win_text():
+    win_text = over_font.render("YOU WIN!", True, (255, 255, 255))
+    text_rect = win_text.get_rect(center=(400, 300))
+    screen.blit(win_text, text_rect)
 
 def draw_player(x, y):
     screen.blit(playerImg, (x, y))
 
-
 def draw_enemy(x, y):
     screen.blit(current_enemy_img, (x, y))
-
 
 def fire_bullet(x, y):
     global bullet_state, bulletX, bulletY
@@ -101,7 +110,6 @@ def fire_bullet(x, y):
     bulletX = x
     bulletY = y
     screen.blit(bulletImg, (bulletX + 16, bulletY + 10))
-
 
 def bullet_animation():
     global bulletY, bullet_state
@@ -112,26 +120,30 @@ def bullet_animation():
             bullet_state = "ready"
             bulletY = playerY
 
-
 def generate_math_question():
     global question_text, correct_answer, user_answer, question_start_time
-    operator = random.choice(["+", "-", "*"])
+    # For 3rd grade: addition, subtraction, multiplication, and simple division.
+    operator = random.choice(["+", "-", "*", "/"])
     if operator == "+":
-        a = random.randint(1, 10)
-        b = random.randint(1, 10)
+        a = random.randint(1, 20)
+        b = random.randint(1, 20)
         correct_answer = a + b
     elif operator == "-":
-        a = random.randint(1, 10)
-        b = random.randint(1, a)  # ensure non-negative result
+        a = random.randint(1, 20)
+        b = random.randint(0, a)  # ensure non-negative result
         correct_answer = a - b
-    else:  # multiplication
+    elif operator == "*":
         a = random.randint(1, 10)
         b = random.randint(1, 10)
         correct_answer = a * b
+    else:  # division, ensure integer result
+        b = random.randint(1, 10)
+        correct_answer = random.randint(1, 10)
+        a = b * correct_answer
+        operator = "/"  # override operator to division
     question_text = f"{a} {operator} {b} = ?"
     user_answer = ""
     question_start_time = pygame.time.get_ticks()
-
 
 # Generate the first math question
 generate_math_question()
@@ -193,6 +205,14 @@ while running:
             waiting_for_feedback = False
             if last_result == "correct":
                 score_value += 1
+                consecutive_incorrect_count = 0  # Reset consecutive counter on success
+                # Check for win condition
+                if score_value >= 20:
+                    game_win_text()
+                    pygame.display.update()
+                    pygame.time.wait(3000)
+                    running = False
+                    continue
                 # Spawn a new alien at the top with normal image.
                 enemyX = playerX
                 enemyY = random.randint(50, 150)
@@ -200,6 +220,13 @@ while running:
             else:
                 # Incorrect or timeout: increment counter and move alien down.
                 incorrect_count += 1
+                consecutive_incorrect_count += 1
+                if consecutive_incorrect_count >= 3:
+                    game_over_text("3_wrong_answers")
+                    pygame.display.update()
+                    pygame.time.wait(3000)
+                    running = False
+                    continue
                 enemyY += spot_size
             generate_math_question()
 
