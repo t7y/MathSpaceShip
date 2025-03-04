@@ -70,6 +70,7 @@ feedback_start_time = 0
 feedback_duration = 1000  # milliseconds (1 second)
 waiting_for_feedback = False  # True when feedback is being displayed
 last_result = None  # "correct" or "incorrect" or "timeout"
+waiting_for_enter = False  # New variable to track if we're waiting for Enter key after incorrect answer
 
 def show_score(x, y):
     score_text = font.render("Score: " + str(score_value), True, (255, 255, 255))
@@ -92,11 +93,33 @@ def game_over_text(reason=None):
     # Center the text on the screen
     text_rect = over_text.get_rect(center=(400, 300))
     screen.blit(over_text, text_rect)
+    
+    # Display final score
+    score_font = pygame.font.Font('freesansbold.ttf', 32)
+    final_score_text = score_font.render(f"Final Score: {score_value}", True, (255, 255, 255))
+    final_score_rect = final_score_text.get_rect(center=(400, 370))
+    screen.blit(final_score_text, final_score_rect)
+    
+    # Display incorrect answers
+    incorrect_text = score_font.render(f"Incorrect Answers: {incorrect_count}", True, (255, 255, 255))
+    incorrect_rect = incorrect_text.get_rect(center=(400, 420))
+    screen.blit(incorrect_text, incorrect_rect)
 
 def game_win_text():
     win_text = over_font.render("YOU WIN!", True, (255, 255, 255))
     text_rect = win_text.get_rect(center=(400, 300))
     screen.blit(win_text, text_rect)
+    
+    # Display final score
+    score_font = pygame.font.Font('freesansbold.ttf', 32)
+    final_score_text = score_font.render(f"Final Score: {score_value}", True, (255, 255, 255))
+    final_score_rect = final_score_text.get_rect(center=(400, 370))
+    screen.blit(final_score_text, final_score_rect)
+    
+    # Display incorrect answers
+    incorrect_text = score_font.render(f"Incorrect Answers: {incorrect_count}", True, (255, 255, 255))
+    incorrect_rect = incorrect_text.get_rect(center=(400, 420))
+    screen.blit(incorrect_text, incorrect_rect)
 
 def draw_player(x, y):
     screen.blit(playerImg, (x, y))
@@ -158,8 +181,8 @@ while running:
     # Calculate remaining time (in seconds)
     time_left = max(0, (question_timeout - (current_time - question_start_time)) // 1000)
 
-    # If not waiting for feedback, check for timeout.
-    if not waiting_for_feedback and current_time - question_start_time > question_timeout:
+    # If not waiting for feedback or enter key, check for timeout.
+    if not waiting_for_feedback and not waiting_for_enter and current_time - question_start_time > question_timeout:
         feedback_message = "Timeout!"
         last_result = "incorrect"
         waiting_for_feedback = True
@@ -169,8 +192,23 @@ while running:
         if event.type == pygame.QUIT:
             running = False
 
-        # Process input only if not waiting for feedback.
-        if not waiting_for_feedback and event.type == pygame.KEYDOWN:
+        # Check for Enter key press when waiting for enter after incorrect answer
+        if waiting_for_enter and event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
+            waiting_for_enter = False
+            # Incorrect or timeout: increment counter and move alien down.
+            incorrect_count += 1
+            consecutive_incorrect_count += 1
+            if consecutive_incorrect_count >= 3:
+                game_over_text("3_wrong_answers")
+                pygame.display.update()
+                pygame.time.wait(3000)
+                running = False
+                continue
+            enemyY += spot_size
+            generate_math_question()
+            
+        # Process input only if not waiting for feedback or enter key.
+        elif not waiting_for_feedback and not waiting_for_enter and event.type == pygame.KEYDOWN:
             if event.key == pygame.K_RETURN:
                 try:
                     if int(user_answer) == correct_answer:
@@ -217,18 +255,21 @@ while running:
                 enemyX = playerX
                 enemyY = random.randint(50, 150)
                 current_enemy_img = alien_img_normal
+                generate_math_question()
             else:
-                # Incorrect or timeout: increment counter and move alien down.
-                incorrect_count += 1
-                consecutive_incorrect_count += 1
-                if consecutive_incorrect_count >= 3:
-                    game_over_text("3_wrong_answers")
-                    pygame.display.update()
-                    pygame.time.wait(3000)
-                    running = False
-                    continue
-                enemyY += spot_size
-            generate_math_question()
+                # For incorrect answers, transition to waiting for enter state
+                waiting_for_enter = True
+    
+    # Display correct answer and prompt for Enter key if waiting after incorrect answer
+    elif waiting_for_enter:
+        question_text_surface = font.render(question_text, True, (255, 255, 0))
+        correct_answer_text = font.render(f"The correct answer is: {correct_answer}", True, (255, 255, 0))
+        press_enter_text = font.render("Press ENTER to continue", True, (255, 255, 0))
+        
+        # Position the text elements with proper spacing
+        screen.blit(question_text_surface, (250, 250))
+        screen.blit(correct_answer_text, (250, 300))
+        screen.blit(press_enter_text, (250, 350))
 
     # Game Over check: if the alien gets too close to the spaceship.
     if enemyY >= playerY - 50:
@@ -249,8 +290,8 @@ while running:
     # Display timer in the upper right corner.
     show_timer(650, 10, time_left)
 
-    # Display math question and current answer if not waiting for feedback.
-    if not waiting_for_feedback:
+    # Display math question and current answer if not waiting for feedback or enter key.
+    if not waiting_for_feedback and not waiting_for_enter:
         question_surface = font.render(question_text, True, (255, 255, 0))
         answer_surface = font.render(user_answer, True, (255, 255, 0))
         screen.blit(question_surface, (250, 300))
